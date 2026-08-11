@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field, EmailStr, PositiveInt, ValidationError
 from typing import Annotated
+
 class Estudiante(BaseModel):
     legajo: PositiveInt
     nombre_completo: Annotated[str, Field(min_length=5)]
