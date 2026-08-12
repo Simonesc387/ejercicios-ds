@@ -39,6 +39,17 @@ class Curso(Base):
     
     profesor_id: Mapped[int] = mapped_column(ForeignKey("profesores.id"))
     profesor: Mapped[Profesor] = relationship(back_populates="cursos")
+    clases: Mapped[List["Clase"]] = relationship(back_populates="curso")
+    
+class Clase(Base):
+    __tablename__ = "clases"
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tema: Mapped[str] = mapped_column(String(150))
+    duracion_minutos: Mapped[int] = mapped_column()
+    
+    curso_id: Mapped[int] = mapped_column(ForeignKey("cursos.id"))
+    curso: Mapped[Curso] = relationship(back_populates="clases")
     
 def main():
     Base.metadata.create_all(engine)
@@ -51,6 +62,8 @@ def main():
         p3 = Profesor(id=3, nombre="Juan", email="juan@gmail.com", fecha_ingreso=datetime(2014, 8, 1), departamento_id=1)
         cur1 = Curso(id=1, titulo="Algebra 1", creditos=10, profesor_id=1)
         cur2 = Curso(id=2, titulo="Analisis 1", creditos=15, profesor_id=2)
+        cla1 = Clase(id=1, tema="Vectores", duracion_minutos=150, curso_id=1)
+        cla2 = Clase(id=2, tema="Funciones", duracion_minutos=120, curso_id=1)
         session.add(dep1)
         session.add(dep2)
         session.add(dep3)
@@ -59,6 +72,8 @@ def main():
         session.add(p3)
         session.add(cur1)
         session.add(cur2)
+        session.add(cla1)
+        session.add(cla2)
         session.commit()
         
     with Session(engine) as session:
@@ -78,6 +93,12 @@ def main():
         cursos = session.scalars(stmt)
         for cur in cursos:
             print(f"Curso: {cur.titulo}, creditos: {cur.creditos}, profesor: {cur.profesor.nombre}")
+        stmt = select(Curso).where(Curso.id==1)
+        curso = session.scalars(stmt).first()
+        clases = curso.clases
+        print(f"Clases del curso {curso.titulo}:")
+        for cla in clases:
+            print(f"\ttema: {cla.tema}, duracion(minutos): {cla.duracion_minutos}")
     
     
     
