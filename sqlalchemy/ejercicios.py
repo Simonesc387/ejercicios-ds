@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 from datetime import datetime
-from typing import List
+from typing import List, Annotated
+from pydantic import Field, ValidationError, TypeAdapter
 from sqlalchemy import create_engine, select, String, DateTime, ForeignKey, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, relationship
+from sqlalchemy.exc import IntegrityError
 
 engine = create_engine("sqlite://", echo=False)
 
@@ -64,11 +66,9 @@ class Estudiante(Base):
 
 class Inscripcion(Base):
     __tablename__ = "inscripciones"
-    
-    id: Mapped[int] = mapped_column(primary_key=True)
-    
-    estudiante_id: Mapped[int] = mapped_column(ForeignKey("estudiantes.id"))
-    curso_id: Mapped[int] = mapped_column(ForeignKey("cursos.id"))
+        
+    estudiante_id: Mapped[int] = mapped_column(ForeignKey("estudiantes.id"), primary_key=True)
+    curso_id: Mapped[int] = mapped_column(ForeignKey("cursos.id"), primary_key=True)
     
     fecha_inscripcion: Mapped[datetime] = mapped_column(DateTime)
     calificacion_final: Mapped[float] = mapped_column()
@@ -97,10 +97,10 @@ def main():
         cla2 = Clase(id=2, tema="Funciones", duracion_minutos=120, curso_id=1)
         e1 = Estudiante(id=1, nombre="Carlos", legajo=1234)
         e2 = Estudiante(id=2, nombre="Nicolas", legajo=4321)
-        ins1 = Inscripcion(id=1, estudiante_id=1, curso_id=1, fecha_inscripcion=datetime(2016, 7, 23), calificacion_final=10)
-        ins2 = Inscripcion(id=2, estudiante_id=2, curso_id=1, fecha_inscripcion=datetime(2019, 5, 3), calificacion_final=1)
-        ins3 = Inscripcion(id=3, estudiante_id=1, curso_id=2, fecha_inscripcion=datetime(2021, 2, 23), calificacion_final=4)
-        ins4 = Inscripcion(id=4, estudiante_id=2, curso_id=2, fecha_inscripcion=datetime(2025, 12, 25), calificacion_final=5)
+        ins1 = Inscripcion(estudiante_id=1, curso_id=1, fecha_inscripcion=datetime(2016, 7, 23), calificacion_final=10)
+        ins2 = Inscripcion(estudiante_id=2, curso_id=1, fecha_inscripcion=datetime(2019, 5, 3), calificacion_final=1)
+        ins3 = Inscripcion(estudiante_id=1, curso_id=2, fecha_inscripcion=datetime(2021, 2, 23), calificacion_final=4)
+        ins4 = Inscripcion(estudiante_id=2, curso_id=2, fecha_inscripcion=datetime(2025, 12, 25), calificacion_final=5)
         session.add_all([dep1, dep2, dep3, p1, p2, p3, cur1, cur2, cur3, cur4, cur5, cur6, cla1, cla2, e1, e2, ins1, ins2, ins3, ins4])
         session.commit()
         
@@ -111,16 +111,22 @@ def main():
             print(f"departamento: {dep.nombre}, profesores:")
             for prof in dep.profesores:
                 print(prof.nombre)
+                
+                
         stmt = select(Profesor)
         profesores = session.scalars(stmt)
         for prof in profesores:
             print(f"Profesor: {prof.nombre}, email: {prof.email}, fecha de ingreso: {prof.fecha_ingreso}, departamento: {prof.departamento.nombre}, cursos:")
             for cur in prof.cursos:
                 print(cur.titulo)
+                
+                
         stmt = select(Curso)
         cursos = session.scalars(stmt)
         for cur in cursos:
             print(f"Curso: {cur.titulo}, creditos: {cur.creditos}, profesor: {cur.profesor.nombre}")
+            
+            
         stmt = select(Curso).where(Curso.id==1)
         curso = session.scalars(stmt).first()
         clases = curso.clases
@@ -143,12 +149,71 @@ def main():
         
         print(f"Promedio de calificaciones del estudiante legajo {estudiante_q}: {promedio_q:.2f}")
         
-        stmt_q3 = select(Curso.titulo, func.count(Inscripcion.id)).join(Inscripcion, isouter=True).group_by(Curso.id)
+        stmt_q3 = select(Curso.titulo, func.count()).join(Inscripcion, isouter=True).group_by(Curso.id)
         conteo_q = session.execute(stmt_q3).all()
         
         print("Cantidad de estudiantes anotados:")
         for titulo, cantidad in conteo_q:
             print(f" - {titulo}: {cantidad} alumno(s)")
+            
+    print("\n\n\n")
+    #funcion de negocio
+    with Session(engine) as session:
+        stmt = select(Estudiante)
+        estudiantes = session.scalars(stmt).all()
+        stmt = select(Curso)
+        cursos = session.scalars(stmt).all()
+    
+    print("Estudiantes:")
+    i=0
+    for est in estudiantes:
+        i += 1
+        print(f"\t{i}) Nombre: {est.nombre}, legajo: {est.legajo}")
+    
+    validador = TypeAdapter(Annotated[int, Field(ge=1, le=i)])
+    
+    while True:
+        try:
+            opcion = input("Ingrese el numero de estudiante a matricular:\n")
+            opcion = validador.validate_strings(opcion)
+            estudiante = opcion - 1
+            break
+        except ValidationError:
+            print("Ingrese una opcion valida")
+            
+    print("Cursos:")
+    i=0
+    for cur in cursos:
+        i += 1
+        print(f"\t{i}) titulo: {cur.titulo}, id: {cur.id}")
+        
+    validador2 = TypeAdapter(Annotated[int, Field(ge=1, le=i)])
+    
+    while True:
+        try:
+            opcion = input("Ingrese el numero del curso al que se desea inscribir:\n")
+            opcion = validador2.validate_strings(opcion)
+            curso = opcion - 1
+            break
+        except ValidationError:
+            print("Ingrese una opcion valida")
+    
+    with Session(engine) as session:
+        nueva_inscripcion = Inscripcion(estudiante_id=estudiantes[estudiante].id, curso_id=cursos[curso].id, fecha_inscripcion= func.now(), calificacion_final=0)
+        try:
+            session.add(nueva_inscripcion)
+            session.commit()
+            print("Matriculacion exitosa")
+        except IntegrityError:
+            session.rollback()
+            print("El alumno ya esta inscripto en el curso")
+        
+        stmt = select(Inscripcion).where(Inscripcion.estudiante_id == estudiantes[estudiante].id)
+        inscripciones = session.scalars(stmt)
+        print("Inscripciones del alumno:")
+        for ins in inscripciones:
+            print(f"\t{ins.curso.titulo}, fecha de inscripcion: {ins.fecha_inscripcion}")
+    
 
     
     
