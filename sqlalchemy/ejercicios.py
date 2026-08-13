@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import List
-from sqlalchemy import create_engine, select, String, DateTime, ForeignKey
+from sqlalchemy import create_engine, select, String, DateTime, ForeignKey, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, relationship
 
 engine = create_engine("sqlite://", echo=False)
@@ -40,6 +40,7 @@ class Curso(Base):
     profesor_id: Mapped[int] = mapped_column(ForeignKey("profesores.id"))
     profesor: Mapped[Profesor] = relationship(back_populates="cursos")
     clases: Mapped[List["Clase"]] = relationship(back_populates="curso")
+    inscripciones: Mapped[List["Inscripcion"]] = relationship(back_populates="curso")
     
 class Clase(Base):
     __tablename__ = "clases"
@@ -50,6 +51,32 @@ class Clase(Base):
     
     curso_id: Mapped[int] = mapped_column(ForeignKey("cursos.id"))
     curso: Mapped[Curso] = relationship(back_populates="clases")
+    
+class Estudiante(Base):
+    __tablename__ = "estudiantes"
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(20))
+    legajo: Mapped[int] = mapped_column()
+    
+    inscripciones: Mapped[List["Inscripcion"]] = relationship(back_populates="estudiante")
+
+
+class Inscripcion(Base):
+    __tablename__ = "inscripciones"
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    
+    estudiante_id: Mapped[int] = mapped_column(ForeignKey("estudiantes.id"))
+    curso_id: Mapped[int] = mapped_column(ForeignKey("cursos.id"))
+    
+    fecha_inscripcion: Mapped[datetime] = mapped_column(DateTime)
+    calificacion_final: Mapped[float] = mapped_column()
+    
+    
+    estudiante: Mapped["Estudiante"] = relationship(back_populates="inscripciones")
+    curso: Mapped["Curso"] = relationship(back_populates="inscripciones")
+    
     
 def main():
     Base.metadata.create_all(engine)
@@ -62,18 +89,19 @@ def main():
         p3 = Profesor(id=3, nombre="Juan", email="juan@gmail.com", fecha_ingreso=datetime(2014, 8, 1), departamento_id=1)
         cur1 = Curso(id=1, titulo="Algebra 1", creditos=10, profesor_id=1)
         cur2 = Curso(id=2, titulo="Analisis 1", creditos=15, profesor_id=2)
+        cur3 = Curso(id=3, titulo="Fisica 1", creditos=16, profesor_id=1)
+        cur4 = Curso(id=4, titulo="Estadistica", creditos=31, profesor_id=1)
+        cur5 = Curso(id=5, titulo="Laboratorio", creditos=5, profesor_id=1)
+        cur6 = Curso(id=6, titulo="Quimica", creditos=22, profesor_id=1)
         cla1 = Clase(id=1, tema="Vectores", duracion_minutos=150, curso_id=1)
         cla2 = Clase(id=2, tema="Funciones", duracion_minutos=120, curso_id=1)
-        session.add(dep1)
-        session.add(dep2)
-        session.add(dep3)
-        session.add(p1)
-        session.add(p2)
-        session.add(p3)
-        session.add(cur1)
-        session.add(cur2)
-        session.add(cla1)
-        session.add(cla2)
+        e1 = Estudiante(id=1, nombre="Carlos", legajo=1234)
+        e2 = Estudiante(id=2, nombre="Nicolas", legajo=4321)
+        ins1 = Inscripcion(id=1, estudiante_id=1, curso_id=1, fecha_inscripcion=datetime(2016, 7, 23), calificacion_final=10)
+        ins2 = Inscripcion(id=2, estudiante_id=2, curso_id=1, fecha_inscripcion=datetime(2019, 5, 3), calificacion_final=1)
+        ins3 = Inscripcion(id=3, estudiante_id=1, curso_id=2, fecha_inscripcion=datetime(2021, 2, 23), calificacion_final=4)
+        ins4 = Inscripcion(id=4, estudiante_id=2, curso_id=2, fecha_inscripcion=datetime(2025, 12, 25), calificacion_final=5)
+        session.add_all([dep1, dep2, dep3, p1, p2, p3, cur1, cur2, cur3, cur4, cur5, cur6, cla1, cla2, e1, e2, ins1, ins2, ins3, ins4])
         session.commit()
         
     with Session(engine) as session:
@@ -99,7 +127,29 @@ def main():
         print(f"Clases del curso {curso.titulo}:")
         for cla in clases:
             print(f"\ttema: {cla.tema}, duracion(minutos): {cla.duracion_minutos}")
-    
+        
+        profesor_q = "Marcelo"
+        stmt_q = select(Curso.titulo, Curso.creditos).join(Profesor).where(Profesor.nombre == profesor_q)
+        resultado_q = session.execute(stmt_q).all()
+        
+        print(f"Cursos que dicta el profesor {profesor_q}:")
+        print("Curso | Creditos")
+        for fila in resultado_q:
+            print(fila)
+
+        estudiante_q = 1234
+        stmt_q2 = select(func.avg(Inscripcion.calificacion_final)).join(Estudiante).where(Estudiante.legajo == estudiante_q)
+        promedio_q = session.scalar(stmt_q2)
+        
+        print(f"Promedio de calificaciones del estudiante legajo {estudiante_q}: {promedio_q:.2f}")
+        
+        stmt_q3 = select(Curso.titulo, func.count(Inscripcion.id)).join(Inscripcion, isouter=True).group_by(Curso.id)
+        conteo_q = session.execute(stmt_q3).all()
+        
+        print("Cantidad de estudiantes anotados:")
+        for titulo, cantidad in conteo_q:
+            print(f" - {titulo}: {cantidad} alumno(s)")
+
     
     
 if __name__ == "__main__":
