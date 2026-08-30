@@ -1,0 +1,10 @@
+#numero {
+    font-size: 30px;
+    margin-bottom: 10px;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 18px;
+    cursor: pointer;
+}
