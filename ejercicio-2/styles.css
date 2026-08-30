@@ -1,0 +1,16 @@
+button {
+    background-color: blue;
+    color: white;
+    padding: 5px;
+}
+
+ul {
+    padding: 10px;
+}
+
+li {
+    padding: 5px;
+    background-color: lightgray;
+    margin: 5px 0;
+    cursor: pointer;
+}
